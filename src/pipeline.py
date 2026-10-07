@@ -22,6 +22,7 @@ from .config import AnalysisConfig
 from .data import create_market_data_service
 from .plots import plot_backtest, plot_risk_comparison, plot_tail_dependence
 from .report import build_report
+from .report_content import build_report_content
 from .results import (
     AnalysisResult,
     HorizonModelParameters,
@@ -258,14 +259,17 @@ def _create_artifacts(
         paths.figures / "backtest.png",
         config.confidence_level,
     )
-    build_report(
-        paths.pdfs / config.report_filename,
-        paths.figures,
+    report_content = build_report_content(
         results.scales,
         data.prices,
         str(data.train.index[-1].date()),
         str(data.test.index[0].date()),
         config,
+    )
+    build_report(
+        paths.pdfs / config.report_filename,
+        paths.figures,
+        report_content,
     )
 
 

@@ -63,6 +63,8 @@ The fixed holdout design is distributional validation, not a rolling one-day for
 
 Internally, risk estimates, backtests, horizon results and fitted-model metadata are immutable dataclasses. Conversion to DataFrames and dictionaries occurs only when writing the required CSV and JSON outputs.
 
+Report prose, conclusions and table values are built independently of the PDF library. The PDF renderer receives this immutable content and handles only page layout, typography and figures.
+
 ## Code map
 
 - `run.py` - single entry point.
@@ -76,7 +78,8 @@ Internally, risk estimates, backtests, horizon results and fitted-model metadata
 - `src/risk.py` - VaR, Expected Shortfall and holdout scoring.
 - `src/results.py` - immutable typed analysis, risk and backtest results.
 - `src/plots.py` - figures.
-- `src/report.py` - PDF generation.
+- `src/report_content.py` - report prose, conclusions and tables.
+- `src/report.py` - PDF layout and rendering.
 - `src/pipeline.py` - complete orchestration.
 
 ## AI-use disclosure
