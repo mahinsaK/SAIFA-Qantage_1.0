@@ -28,6 +28,12 @@ The current analysis uses 100,000 simulations per horizon. For a quick code chec
 uv run python run.py --simulations 20000
 ```
 
+Run the offline unit tests with:
+
+```bash
+uv run python -m unittest discover -s tests -v
+```
+
 ## Outputs
 
 - `output/pdf/Quant_Edge_1.0_Report.pdf` - submission report.
@@ -59,7 +65,10 @@ The fixed holdout design is distributional validation, not a rolling one-day for
 
 - `run.py` - single entry point.
 - `src/config.py` - central, validated analysis configuration.
-- `src/data.py` - download, validation and return construction.
+- `src/data.py` - market-data application service.
+- `src/data_source.py` - FRED acquisition and raw-response caching.
+- `src/data_repository.py` - aligned CSV snapshot persistence.
+- `src/data_preparation.py` - alignment, validation and log-return construction.
 - `src/wavelets.py` - additive multiresolution decomposition.
 - `src/copulas.py` - copula estimation, simulation and tail dependence.
 - `src/risk.py` - VaR, Expected Shortfall and holdout scoring.

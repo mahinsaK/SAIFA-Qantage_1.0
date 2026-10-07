@@ -19,7 +19,7 @@ from .copulas import (
     t_lower_tail_dependence,
 )
 from .config import AnalysisConfig
-from .data import load_prices, make_returns
+from .data import create_market_data_service
 from .plots import plot_backtest, plot_risk_comparison, plot_tail_dependence
 from .report import build_report
 from .risk import holdout_metrics, portfolio_losses, var_es
@@ -71,8 +71,9 @@ def _prepare_data(
     refresh_data: bool,
 ) -> PreparedData:
     """Load, split, transform, and validate inputs for model analysis."""
-    prices = load_prices(root, config, refresh_data)
-    returns = make_returns(prices)
+    market_data = create_market_data_service(root, config)
+    prices = market_data.load_prices(refresh_data)
+    returns = market_data.calculate_returns(prices)
     split = int(config.train_fraction * len(returns))
     train = returns.iloc[:split].copy()
     test = returns.iloc[split:].copy()
