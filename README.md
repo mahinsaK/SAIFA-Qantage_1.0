@@ -34,6 +34,8 @@ Run the offline unit tests with:
 uv run python -m unittest discover -s tests -v
 ```
 
+The focused suite covers configuration invariants, market-data preparation, copula contracts, additive wavelet reconstruction, risk metrics, typed results, injected orchestration, report content and output serialization.
+
 ## Outputs
 
 - `output/pdf/Quant_Edge_1.0_Report.pdf` - submission report.
