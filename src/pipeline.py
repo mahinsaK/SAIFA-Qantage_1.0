@@ -22,6 +22,12 @@ from .config import AnalysisConfig
 from .data import create_market_data_service
 from .plots import plot_backtest, plot_risk_comparison, plot_tail_dependence
 from .report import build_report
+from .results import (
+    AnalysisResult,
+    HorizonModelParameters,
+    ScaleResult,
+    matrix_to_tuple,
+)
 from .risk import holdout_metrics, portfolio_losses, var_es
 from .wavelets import decompose
 
@@ -98,7 +104,7 @@ def _analyze_horizon(
     primary_seed: np.random.SeedSequence,
     benchmark_seed: np.random.SeedSequence,
     config: AnalysisConfig,
-) -> tuple[dict[str, float | int | str], dict[str, object]]:
+) -> tuple[ScaleResult, HorizonModelParameters]:
     """Fit, simulate, and score both models for one investment horizon."""
     fitted_primary = primary_model.fit(train_values)
 
@@ -114,58 +120,54 @@ def _analyze_horizon(
     )
     t_sim = empirical_inverse_margins(t_u, train_values)
     g_sim = empirical_inverse_margins(g_u, train_values)
-    t_var, t_es = var_es(
+    t_risk = var_es(
         portfolio_losses(t_sim, weights),
         config.confidence_level,
     )
-    g_var, g_es = var_es(
+    gaussian_risk = var_es(
         portfolio_losses(g_sim, weights),
         config.confidence_level,
     )
     realized = portfolio_losses(test_values, weights)
     t_holdout = holdout_metrics(
         realized,
-        t_var,
-        t_es,
+        t_risk,
         config.confidence_level,
     )
-    g_holdout = holdout_metrics(
+    gaussian_holdout = holdout_metrics(
         realized,
-        g_var,
-        g_es,
+        gaussian_risk,
         config.confidence_level,
     )
 
-    primary_parameters = primary_model.parameters(fitted_primary)
     primary_correlation = primary_model.correlation(fitted_primary)
-    result = {
-        "scale": scale,
-        "empirical_tail": empirical_lower_tail_dependence(
+    result = ScaleResult(
+        scale=scale,
+        empirical_tail=empirical_lower_tail_dependence(
             train_values,
             config.tail_quantile,
         ),
-        "t_tail": primary_model.lower_tail_dependence(fitted_primary),
-        "t_df": float(primary_parameters["t_df"]),
-        "mean_corr": _mean_off_diagonal(primary_correlation),
-        "t_var": t_var,
-        "t_es": t_es,
-        "gaussian_var": g_var,
-        "gaussian_es": g_es,
-        "test_n": t_holdout["observations"],
-        "t_exceptions": t_holdout["exceptions"],
-        "t_exception_rate": t_holdout["exception_rate"],
-        "t_quantile_loss": t_holdout["quantile_loss"],
-        "gaussian_exceptions": g_holdout["exceptions"],
-        "gaussian_exception_rate": g_holdout["exception_rate"],
-        "gaussian_quantile_loss": g_holdout["quantile_loss"],
-    }
-    return result, primary_parameters
+        t_tail=primary_model.lower_tail_dependence(fitted_primary),
+        t_df=fitted_primary.df,
+        mean_corr=_mean_off_diagonal(primary_correlation),
+        t_risk=t_risk,
+        gaussian_risk=gaussian_risk,
+        t_backtest=t_holdout,
+        gaussian_backtest=gaussian_holdout,
+    )
+    parameters = HorizonModelParameters(
+        scale=scale,
+        degrees_of_freedom=fitted_primary.df,
+        log_likelihood=fitted_primary.loglik,
+        correlation=matrix_to_tuple(fitted_primary.corr),
+    )
+    return result, parameters
 
 
 def _analyze_horizons(
     data: PreparedData,
     config: AnalysisConfig,
-) -> tuple[pd.DataFrame, dict[str, object]]:
+) -> AnalysisResult:
     """Analyze all configured horizons with deterministic child seeds."""
     seed_sequence = np.random.SeedSequence(config.seed)
     child_seeds = seed_sequence.spawn(len(config.ordered_scale_labels) * 2)
@@ -173,10 +175,10 @@ def _analyze_horizons(
     benchmark_model = GaussianCopulaModel()
     benchmark_copula = benchmark_model.fit(data.train.to_numpy())
 
-    rows: list[dict[str, float | int | str]] = []
-    models: dict[str, object] = {}
+    scale_results: list[ScaleResult] = []
+    model_parameters: list[HorizonModelParameters] = []
     for index, scale in enumerate(config.ordered_scale_labels):
-        result, model_parameters = _analyze_horizon(
+        result, horizon_parameters = _analyze_horizon(
             scale=scale,
             train_values=data.train_components[scale].to_numpy(),
             test_values=data.test_components[scale].to_numpy(),
@@ -188,35 +190,26 @@ def _analyze_horizons(
             benchmark_seed=child_seeds[2 * index + 1],
             config=config,
         )
-        rows.append(result)
-        models[scale] = model_parameters
+        scale_results.append(result)
+        model_parameters.append(horizon_parameters)
 
-    results = pd.DataFrame(rows)
-    results["es_change_pct"] = 100 * (
-        results["t_es"] / results["gaussian_es"] - 1
+    return AnalysisResult(
+        scales=tuple(scale_results),
+        benchmark_correlation=matrix_to_tuple(
+            benchmark_model.correlation(benchmark_copula)
+        ),
+        model_parameters=tuple(model_parameters),
     )
-    parameters: dict[str, object] = {
-        "config": asdict(config),
-        "asset_order": list(config.asset_codes),
-        "weights": data.weights.tolist(),
-        "seed": config.seed,
-        "simulations_per_scale": config.simulations,
-        "benchmark_correlation": benchmark_model.correlation(
-            benchmark_copula
-        ).tolist(),
-        "models": models,
-    }
-    return results, parameters
 
 
 def _save_results(
     paths: OutputPaths,
     data: PreparedData,
-    results: pd.DataFrame,
-    parameters: dict[str, object],
+    results: AnalysisResult,
+    config: AnalysisConfig,
 ) -> None:
     """Persist machine-readable results without creating presentation artifacts."""
-    results.to_csv(
+    pd.DataFrame(results.csv_records()).to_csv(
         paths.tables / "risk_results.csv",
         index=False,
         float_format="%.10f",
@@ -229,35 +222,46 @@ def _save_results(
         "w",
         encoding="utf-8",
     ) as handle:
+        parameters: dict[str, object] = {
+            "config": asdict(config),
+            "asset_order": list(config.asset_codes),
+            "weights": data.weights.tolist(),
+            "seed": config.seed,
+            "simulations_per_scale": config.simulations,
+            "benchmark_correlation": [
+                list(row) for row in results.benchmark_correlation
+            ],
+            "models": results.model_parameter_records(),
+        }
         json.dump(parameters, handle, indent=2)
 
 
 def _create_artifacts(
     paths: OutputPaths,
     data: PreparedData,
-    results: pd.DataFrame,
+    results: AnalysisResult,
     config: AnalysisConfig,
 ) -> None:
     """Create plots and the PDF report from completed analysis results."""
     plot_tail_dependence(
-        results,
+        results.scales,
         paths.figures / "tail_dependence.png",
         config.tail_quantile,
     )
     plot_risk_comparison(
-        results,
+        results.scales,
         paths.figures / "risk_comparison.png",
         config.confidence_level,
     )
     plot_backtest(
-        results,
+        results.scales,
         paths.figures / "backtest.png",
         config.confidence_level,
     )
     build_report(
         paths.pdfs / config.report_filename,
         paths.figures,
-        results,
+        results.scales,
         data.prices,
         str(data.train.index[-1].date()),
         str(data.test.index[0].date()),
@@ -288,7 +292,7 @@ def run_pipeline(
     """Coordinate the analysis stages without implementing their details."""
     paths = _create_output_paths(root)
     data = _prepare_data(root, config, refresh_data)
-    results, parameters = _analyze_horizons(data, config)
-    _save_results(paths, data, results, parameters)
+    results = _analyze_horizons(data, config)
+    _save_results(paths, data, results, config)
     _create_artifacts(paths, data, results, config)
     _print_summary(paths, data, config)

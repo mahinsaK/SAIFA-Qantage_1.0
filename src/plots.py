@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import matplotlib
@@ -9,7 +10,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+
+from .results import ScaleResult
 
 
 BLUE = "#173A63"
@@ -36,7 +38,7 @@ def _style() -> None:
 
 
 def plot_tail_dependence(
-    results: pd.DataFrame,
+    results: Sequence[ScaleResult],
     path: Path,
     tail_quantile: float,
 ) -> None:
@@ -45,15 +47,22 @@ def plot_tail_dependence(
     fig, ax = plt.subplots(figsize=(7.2, 3.4))
     ax.plot(
         x,
-        results["empirical_tail"],
+        [result.empirical_tail for result in results],
         marker="o",
         lw=2,
         color=BLUE,
         label=f"Empirical {100 * tail_quantile:g}% co-exceedance",
     )
-    ax.plot(x, results["t_tail"], marker="s", lw=2, color=ORANGE, label="Fitted t-copula asymptotic tail")
+    ax.plot(
+        x,
+        [result.t_tail for result in results],
+        marker="s",
+        lw=2,
+        color=ORANGE,
+        label="Fitted t-copula asymptotic tail",
+    )
     ax.axhline(0, color="#666", lw=0.8)
-    ax.set_xticks(x, results["scale"], rotation=20, ha="right")
+    ax.set_xticks(x, [result.scale for result in results], rotation=20, ha="right")
     ax.set_ylabel("Average lower-tail dependence")
     ax.set_title("Dependence in losses changes across wavelet horizons")
     ax.legend(frameon=False, loc="best")
@@ -63,7 +72,7 @@ def plot_tail_dependence(
 
 
 def plot_risk_comparison(
-    results: pd.DataFrame,
+    results: Sequence[ScaleResult],
     path: Path,
     confidence_level: float,
 ) -> None:
@@ -71,9 +80,13 @@ def plot_risk_comparison(
     x = np.arange(len(results))
     width = 0.36
     fig, ax = plt.subplots(figsize=(7.2, 3.5))
-    ax.bar(x - width / 2, 100 * results["t_es"], width, color=BLUE, label="Wavelet + t-copula")
-    ax.bar(x + width / 2, 100 * results["gaussian_es"], width, color=ORANGE, label="Single Gaussian dependence")
-    ax.set_xticks(x, results["scale"], rotation=20, ha="right")
+    t_es = np.array([result.t_risk.expected_shortfall for result in results])
+    gaussian_es = np.array(
+        [result.gaussian_risk.expected_shortfall for result in results]
+    )
+    ax.bar(x - width / 2, 100 * t_es, width, color=BLUE, label="Wavelet + t-copula")
+    ax.bar(x + width / 2, 100 * gaussian_es, width, color=ORANGE, label="Single Gaussian dependence")
+    ax.set_xticks(x, [result.scale for result in results], rotation=20, ha="right")
     confidence_pct = 100 * confidence_level
     ax.set_ylabel(f"{confidence_pct:g}% Expected Shortfall (% return)")
     ax.set_title("Ignoring horizon-specific dependence changes measured tail risk")
@@ -84,7 +97,7 @@ def plot_risk_comparison(
 
 
 def plot_backtest(
-    results: pd.DataFrame,
+    results: Sequence[ScaleResult],
     path: Path,
     confidence_level: float,
 ) -> None:
@@ -94,8 +107,12 @@ def plot_backtest(
     target = 1 - confidence_level
     confidence_pct = 100 * confidence_level
     fig, ax = plt.subplots(figsize=(7.2, 3.4))
-    ax.bar(x - width / 2, 100 * results["t_exception_rate"], width, color=BLUE, label="Wavelet + t-copula")
-    ax.bar(x + width / 2, 100 * results["gaussian_exception_rate"], width, color=ORANGE, label="Single Gaussian dependence")
+    t_rates = np.array([result.t_backtest.exception_rate for result in results])
+    gaussian_rates = np.array(
+        [result.gaussian_backtest.exception_rate for result in results]
+    )
+    ax.bar(x - width / 2, 100 * t_rates, width, color=BLUE, label="Wavelet + t-copula")
+    ax.bar(x + width / 2, 100 * gaussian_rates, width, color=ORANGE, label="Single Gaussian dependence")
     ax.axhline(
         100 * target,
         color=GREEN,
@@ -104,12 +121,12 @@ def plot_backtest(
         label=f"Nominal {100 * target:g}%",
     )
     plotted_max = max(
-        float((100 * results["t_exception_rate"]).max()),
-        float((100 * results["gaussian_exception_rate"]).max()),
+        float((100 * t_rates).max()),
+        float((100 * gaussian_rates).max()),
         100 * target,
     )
     ax.set_ylim(0, 1.30 * plotted_max)
-    ax.set_xticks(x, results["scale"], rotation=20, ha="right")
+    ax.set_xticks(x, [result.scale for result in results], rotation=20, ha="right")
     ax.set_ylabel("Holdout VaR exception rate (%)")
     ax.set_title(f"Out-of-sample {confidence_pct:g}% VaR coverage")
     ax.legend(frameon=False, ncol=3, fontsize=7.2, loc="upper center")

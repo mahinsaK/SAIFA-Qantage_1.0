@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pandas as pd
@@ -24,6 +25,7 @@ from reportlab.platypus import (
 )
 
 from .config import AnalysisConfig
+from .results import ScaleResult
 
 
 NAVY = colors.HexColor("#173A63")
@@ -99,7 +101,7 @@ def _callout(text: str, styles, color=PALE_GOLD):
 def build_report(
     output_path: Path,
     figures_dir: Path,
-    results: pd.DataFrame,
+    results: Sequence[ScaleResult],
     prices: pd.DataFrame,
     train_end: str,
     test_start: str,
@@ -131,18 +133,22 @@ def build_report(
     story += [Spacer(1, 42 * mm), Paragraph("ROUND 1 - INITIAL SCREENING CHALLENGE", styles["CoverKicker"]), Paragraph(f"Reproducible analysis | {config.report_date}", styles["CoverSub"]), PageBreak()]
 
     # Page 1: executive answer.
-    max_tail = float(results["empirical_tail"].max())
-    min_tail = float(results["empirical_tail"].min())
-    results = results.copy()
-    results["es_change_pct"] = 100 * (results["t_es"] / results["gaussian_es"] - 1)
-    idx = results["es_change_pct"].abs().idxmax()
-    focal = results.loc[idx]
-    direction = "higher" if focal["es_change_pct"] >= 0 else "lower"
-    t_gap = float((results["t_exception_rate"] - config.loss_probability).abs().mean())
-    g_gap = float((results["gaussian_exception_rate"] - config.loss_probability).abs().mean())
+    results = tuple(results)
+    max_tail = max(result.empirical_tail for result in results)
+    min_tail = min(result.empirical_tail for result in results)
+    focal = max(results, key=lambda result: abs(result.es_change_pct))
+    direction = "higher" if focal.es_change_pct >= 0 else "lower"
+    t_gap = sum(
+        abs(result.t_backtest.exception_rate - config.loss_probability)
+        for result in results
+    ) / len(results)
+    g_gap = sum(
+        abs(result.gaussian_backtest.exception_rate - config.loss_probability)
+        for result in results
+    ) / len(results)
     better = "wavelet-t model" if t_gap < g_gap else "Gaussian benchmark"
-    story += [Paragraph("Executive answer", styles["H1x"]), _callout(f"Yes. Average empirical lower-tail co-exceedance ranges from {min_tail:.2f} to {max_tail:.2f} across wavelet horizons. At the largest risk-measurement difference ({focal['scale']}), horizon-specific modelling produces {confidence_pct:g}% Expected Shortfall that is {abs(focal['es_change_pct']):.1f}% {direction} than the single-dependence benchmark.", styles), Spacer(1, 8)]
-    story += [Paragraph("Decision", styles["H2x"]), Paragraph(f"A risk manager should match the dependence model to the holding horizon. For exposures dominated by the {focal['scale']} band, replace the fixed Gaussian dependence assumption with the fitted horizon-specific Student-t copula and set the component ES budget to {100*focal['t_es']:.3f}% of portfolio value at {confidence_pct:g}% confidence. Re-estimate after material market-regime changes.", styles["Bodyx"])]
+    story += [Paragraph("Executive answer", styles["H1x"]), _callout(f"Yes. Average empirical lower-tail co-exceedance ranges from {min_tail:.2f} to {max_tail:.2f} across wavelet horizons. At the largest risk-measurement difference ({focal.scale}), horizon-specific modelling produces {confidence_pct:g}% Expected Shortfall that is {abs(focal.es_change_pct):.1f}% {direction} than the single-dependence benchmark.", styles), Spacer(1, 8)]
+    story += [Paragraph("Decision", styles["H2x"]), Paragraph(f"A risk manager should match the dependence model to the holding horizon. For exposures dominated by the {focal.scale} band, replace the fixed Gaussian dependence assumption with the fitted horizon-specific Student-t copula and set the component ES budget to {100*focal.t_risk.expected_shortfall:.3f}% of portfolio value at {confidence_pct:g}% confidence. Re-estimate after material market-regime changes.", styles["Bodyx"])]
     story += [Paragraph("What was tested", styles["H2x"]), Paragraph(f"An equal-weight portfolio of {len(config.assets)} public market proxies was studied from {prices.index.min().date()} to {prices.index.max().date()}. The first {train_pct:g}% of returns formed the estimation sample (ending {train_end}); the remaining {test_pct:g}% formed an untouched holdout sample (starting {test_start}). The mean absolute gap between the observed VaR exception rate and the nominal {loss_pct:g}% rate is {100*t_gap:.2f} percentage points for the wavelet-t model and {100*g_gap:.2f} for the benchmark; by this coverage diagnostic, the {better} is closer on average.", styles["Bodyx"])]
     story += [Paragraph("Contribution", styles["H2x"]), Paragraph("The comparison holds each wavelet band's empirical marginal distributions fixed. Only the dependence model changes: a Student-t copula estimated separately at each horizon versus one Gaussian copula estimated from raw daily returns and reused everywhere. The resulting ES difference is therefore attributable to dependence and tail assumptions rather than volatility scaling.", styles["Bodyx"]), PageBreak()]
 
@@ -164,27 +170,27 @@ def build_report(
     pair_count = len(config.assets) * (len(config.assets) - 1) // 2
     story += [Paragraph("3. Tail dependence changes with horizon", styles["H1x"]), Image(str(figures_dir / "tail_dependence.png"), width=166*mm, height=78*mm), Paragraph(f"Figure 1. Average across the {pair_count} asset pairs. Empirical co-exceedance is P(Uj <= {config.tail_quantile:.2f} | Ui <= {config.tail_quantile:.2f}); t-copula tail dependence is the fitted asymptotic coefficient.", styles["Captionx"])]
     tail_table = [["Horizon", "Empirical co-exceed.", "t-copula tail", "t df", "Mean correlation"]]
-    for _, row in results.iterrows():
-        tail_table.append([row["scale"], f"{row['empirical_tail']:.3f}", f"{row['t_tail']:.3f}", f"{row['t_df']:.2f}", f"{row['mean_corr']:.3f}"])
+    for result in results:
+        tail_table.append([result.scale, f"{result.empirical_tail:.3f}", f"{result.t_tail:.3f}", f"{result.t_df:.2f}", f"{result.mean_corr:.3f}"])
     story += [_table(tail_table, [34*mm, 38*mm, 32*mm, 25*mm, 37*mm]), Spacer(1, 7), Paragraph("The non-flat profile is inconsistent with the practical assumption that one dependence structure adequately represents every holding horizon. The fitted degrees of freedom also change by band, indicating that joint-tail thickness is not constant even when the asset set and sample are unchanged.", styles["Bodyx"]), PageBreak()]
 
     # Page 5: risk.
     story += [Paragraph("4. Effect on measured portfolio risk", styles["H1x"]), Image(str(figures_dir / "risk_comparison.png"), width=166*mm, height=81*mm), Paragraph(f"Figure 2. Simulated {confidence_pct:g}% Expected Shortfall for each additive return band. Margins are identical across models; dependence assumptions differ.", styles["Captionx"])]
     risk_table = [["Horizon", "t VaR", "t ES", "Gaussian VaR", "Gaussian ES", "ES change"]]
-    for _, row in results.iterrows():
-        risk_table.append([row["scale"], f"{100*row['t_var']:.3f}%", f"{100*row['t_es']:.3f}%", f"{100*row['gaussian_var']:.3f}%", f"{100*row['gaussian_es']:.3f}%", f"{row['es_change_pct']:+.1f}%"])
+    for result in results:
+        risk_table.append([result.scale, f"{100*result.t_risk.var:.3f}%", f"{100*result.t_risk.expected_shortfall:.3f}%", f"{100*result.gaussian_risk.var:.3f}%", f"{100*result.gaussian_risk.expected_shortfall:.3f}%", f"{result.es_change_pct:+.1f}%"])
     story += [_table(risk_table, [31*mm, 25*mm, 25*mm, 31*mm, 29*mm, 25*mm]), Spacer(1, 6), Paragraph("A positive ES change means the single Gaussian structure understates loss severity relative to the horizon-specific Student-t model; a negative value means it overstates it. The direction need not be identical at every scale, which is exactly why a single adjustment factor is insufficient.", styles["Bodyx"]), PageBreak()]
 
     # Page 6: holdout.
     story += [Paragraph("5. Out-of-sample comparison", styles["H1x"]), Image(str(figures_dir / "backtest.png"), width=166*mm, height=78*mm), Paragraph(f"Figure 3. Holdout VaR exception rates. The dashed line is the nominal {loss_pct:g}% rate; small holdout samples make exact equality unlikely.", styles["Captionx"])]
     back_table = [["Horizon", "N", "t exceptions", "t rate", "Gaussian exceptions", "Gaussian rate", "Better q-loss"]]
-    for _, row in results.iterrows():
-        winner = "t" if row["t_quantile_loss"] < row["gaussian_quantile_loss"] else "Gaussian"
-        back_table.append([row["scale"], str(int(row["test_n"])), str(int(row["t_exceptions"])), f"{100*row['t_exception_rate']:.2f}%", str(int(row["gaussian_exceptions"])), f"{100*row['gaussian_exception_rate']:.2f}%", winner])
+    for result in results:
+        winner = "t" if result.t_backtest.quantile_loss < result.gaussian_backtest.quantile_loss else "Gaussian"
+        back_table.append([result.scale, str(result.t_backtest.observations), str(result.t_backtest.exceptions), f"{100*result.t_backtest.exception_rate:.2f}%", str(result.gaussian_backtest.exceptions), f"{100*result.gaussian_backtest.exception_rate:.2f}%", winner])
     story += [_table(back_table, [29*mm, 13*mm, 23*mm, 21*mm, 32*mm, 25*mm, 23*mm], font_size=6.9), Spacer(1, 6), Paragraph("Coverage and quantile loss are complementary. Coverage asks whether the threshold is crossed at the intended frequency; quantile loss also penalizes how far observations fall on either side of the threshold. The holdout test prevents a more flexible t-copula from receiving credit merely for fitting its training sample.", styles["Bodyx"]), PageBreak()]
 
     # Page 7: recommendation/limits.
-    story += [Paragraph("6. Recommendation, limits and robustness", styles["H1x"]), _callout(f"Action for tomorrow: map each risk position to its holding horizon and use that band's fitted t-copula ES. For the {focal['scale']} component, budget {100*focal['t_es']:.3f}% of portfolio value at {confidence_pct:g}% ES rather than {100*focal['gaussian_es']:.3f}% from the fixed Gaussian model ({focal['es_change_pct']:+.1f}% difference).", styles), Spacer(1, 8), Paragraph("Implementation rule", styles["H2x"]), Paragraph("Maintain the existing Gaussian result as a challenger, not as the production number. Refit horizon models on a scheduled basis and trigger an unscheduled review when realized VaR exceptions cluster. Escalate when the horizon-specific ES exceeds the Gaussian ES by the institution's materiality threshold.", styles["Bodyx"]), Paragraph("Limitations", styles["H2x"])]
+    story += [Paragraph("6. Recommendation, limits and robustness", styles["H1x"]), _callout(f"Action for tomorrow: map each risk position to its holding horizon and use that band's fitted t-copula ES. For the {focal.scale} component, budget {100*focal.t_risk.expected_shortfall:.3f}% of portfolio value at {confidence_pct:g}% ES rather than {100*focal.gaussian_risk.expected_shortfall:.3f}% from the fixed Gaussian model ({focal.es_change_pct:+.1f}% difference).", styles), Spacer(1, 8), Paragraph("Implementation rule", styles["H2x"]), Paragraph("Maintain the existing Gaussian result as a challenger, not as the production number. Refit horizon models on a scheduled basis and trigger an unscheduled review when realized VaR exceptions cluster. Escalate when the horizon-specific ES exceeds the Gaussian ES by the institution's materiality threshold.", styles["Bodyx"]), Paragraph("Limitations", styles["H2x"])]
     limitations = [["Limitation", "Consequence and next test"], ["Index/spot proxies", "Implementation costs, futures rolls and ETF tracking are absent; repeat with investable instruments."], ["Fixed 80/20 split", "One market regime can dominate; add rolling-window and crisis-subperiod validation."], ["Symmetric t tails", "Upside and downside dependence share one parameter; compare with Clayton, Gumbel or vine copulas."], ["Wavelet boundary effects", "Edge coefficients are affected by periodic extension; test longer samples and alternative filters."], ["Band-level risk", "Results describe additive horizon components, not a fully dynamic multi-period P&L forecast."], ["Empirical margins", "Extreme quantiles rely on finite samples; compare generalized Pareto tail models."]]
     story += [_table(limitations, [42*mm, 124*mm]), Paragraph("Robust interpretation", styles["H2x"]), Paragraph("The defensible result is the existence and economic size of horizon variation within this sample. The framework should not be read as proof that one copula family will dominate for every portfolio or future regime.", styles["Bodyx"]), PageBreak()]
 
@@ -196,6 +202,6 @@ def build_report(
     for ref in refs:
         story.append(Paragraph(ref, styles["Smallx"]))
     story.append(Spacer(1, 4))
-    story.append(Paragraph("Code map: src/config.py defines assumptions; src/data.py coordinates market data; src/data_source.py acquires FRED series; src/data_repository.py persists snapshots; src/data_preparation.py cleans levels and calculates returns; src/wavelets.py creates horizon bands; src/copulas.py defines the common model contract and copula implementations; src/risk.py scores risk; src/pipeline.py orchestrates outputs; src/report.py builds this document.", styles["Captionx"]))
+    story.append(Paragraph("Code map: src/config.py defines assumptions; src/data.py coordinates market data; src/data_source.py acquires FRED series; src/data_repository.py persists snapshots; src/data_preparation.py cleans levels and calculates returns; src/wavelets.py creates horizon bands; src/copulas.py defines the common model contract and implementations; src/risk.py scores risk; src/results.py defines immutable result contracts; src/pipeline.py orchestrates outputs; src/report.py builds this document.", styles["Captionx"]))
 
     doc.build(story)

@@ -61,6 +61,8 @@ The benchmark's raw-return Gaussian copula correlation is reused at all wavelet 
 
 The fixed holdout design is distributional validation, not a rolling one-day forecast. Main limitations are index/spot proxies, symmetric t-copula tails, wavelet boundary effects and finite-sample empirical tail estimates. These are discussed in the report.
 
+Internally, risk estimates, backtests, horizon results and fitted-model metadata are immutable dataclasses. Conversion to DataFrames and dictionaries occurs only when writing the required CSV and JSON outputs.
+
 ## Code map
 
 - `run.py` - single entry point.
@@ -72,6 +74,7 @@ The fixed holdout design is distributional validation, not a rolling one-day for
 - `src/wavelets.py` - additive multiresolution decomposition.
 - `src/copulas.py` - common copula interface plus Student-t and Gaussian implementations.
 - `src/risk.py` - VaR, Expected Shortfall and holdout scoring.
+- `src/results.py` - immutable typed analysis, risk and backtest results.
 - `src/plots.py` - figures.
 - `src/report.py` - PDF generation.
 - `src/pipeline.py` - complete orchestration.
