@@ -10,13 +10,13 @@ import numpy as np
 import pandas as pd
 
 from .copulas import (
+    CopulaModel,
+    GaussianCopula,
+    GaussianCopulaModel,
+    StudentTCopulaModel,
+    TCopula,
     empirical_inverse_margins,
     empirical_lower_tail_dependence,
-    fit_gaussian_correlation,
-    fit_t_copula,
-    simulate_gaussian_uniforms,
-    simulate_t_uniforms,
-    t_lower_tail_dependence,
 )
 from .config import AnalysisConfig
 from .data import create_market_data_service
@@ -46,7 +46,6 @@ class PreparedData:
     train_components: dict[str, pd.DataFrame]
     test_components: dict[str, pd.DataFrame]
     weights: np.ndarray
-    benchmark_corr: np.ndarray
 
 
 def _mean_off_diagonal(matrix: np.ndarray) -> float:
@@ -85,7 +84,6 @@ def _prepare_data(
         train_components=decompose(train, config),
         test_components=decompose(test, config),
         weights=np.asarray(config.weights),
-        benchmark_corr=fit_gaussian_correlation(train.to_numpy()),
     )
 
 
@@ -94,21 +92,23 @@ def _analyze_horizon(
     train_values: np.ndarray,
     test_values: np.ndarray,
     weights: np.ndarray,
-    benchmark_corr: np.ndarray,
+    primary_model: CopulaModel[TCopula],
+    benchmark_model: CopulaModel[GaussianCopula],
+    benchmark_copula: GaussianCopula,
     primary_seed: np.random.SeedSequence,
     benchmark_seed: np.random.SeedSequence,
     config: AnalysisConfig,
 ) -> tuple[dict[str, float | int | str], dict[str, object]]:
     """Fit, simulate, and score both models for one investment horizon."""
-    model = fit_t_copula(train_values, config.t_df_bounds)
+    fitted_primary = primary_model.fit(train_values)
 
-    t_u = simulate_t_uniforms(
-        model,
+    t_u = primary_model.simulate_uniforms(
+        fitted_primary,
         config.simulations,
         np.random.default_rng(primary_seed),
     )
-    g_u = simulate_gaussian_uniforms(
-        benchmark_corr,
+    g_u = benchmark_model.simulate_uniforms(
+        benchmark_copula,
         config.simulations,
         np.random.default_rng(benchmark_seed),
     )
@@ -136,15 +136,17 @@ def _analyze_horizon(
         config.confidence_level,
     )
 
+    primary_parameters = primary_model.parameters(fitted_primary)
+    primary_correlation = primary_model.correlation(fitted_primary)
     result = {
         "scale": scale,
         "empirical_tail": empirical_lower_tail_dependence(
             train_values,
             config.tail_quantile,
         ),
-        "t_tail": t_lower_tail_dependence(model),
-        "t_df": model.df,
-        "mean_corr": _mean_off_diagonal(model.corr),
+        "t_tail": primary_model.lower_tail_dependence(fitted_primary),
+        "t_df": float(primary_parameters["t_df"]),
+        "mean_corr": _mean_off_diagonal(primary_correlation),
         "t_var": t_var,
         "t_es": t_es,
         "gaussian_var": g_var,
@@ -157,12 +159,7 @@ def _analyze_horizon(
         "gaussian_exception_rate": g_holdout["exception_rate"],
         "gaussian_quantile_loss": g_holdout["quantile_loss"],
     }
-    model_parameters: dict[str, object] = {
-        "t_df": model.df,
-        "t_loglik": model.loglik,
-        "t_correlation": model.corr.tolist(),
-    }
-    return result, model_parameters
+    return result, primary_parameters
 
 
 def _analyze_horizons(
@@ -172,6 +169,9 @@ def _analyze_horizons(
     """Analyze all configured horizons with deterministic child seeds."""
     seed_sequence = np.random.SeedSequence(config.seed)
     child_seeds = seed_sequence.spawn(len(config.ordered_scale_labels) * 2)
+    primary_model = StudentTCopulaModel(config.t_df_bounds)
+    benchmark_model = GaussianCopulaModel()
+    benchmark_copula = benchmark_model.fit(data.train.to_numpy())
 
     rows: list[dict[str, float | int | str]] = []
     models: dict[str, object] = {}
@@ -181,7 +181,9 @@ def _analyze_horizons(
             train_values=data.train_components[scale].to_numpy(),
             test_values=data.test_components[scale].to_numpy(),
             weights=data.weights,
-            benchmark_corr=data.benchmark_corr,
+            primary_model=primary_model,
+            benchmark_model=benchmark_model,
+            benchmark_copula=benchmark_copula,
             primary_seed=child_seeds[2 * index],
             benchmark_seed=child_seeds[2 * index + 1],
             config=config,
@@ -199,7 +201,9 @@ def _analyze_horizons(
         "weights": data.weights.tolist(),
         "seed": config.seed,
         "simulations_per_scale": config.simulations,
-        "benchmark_correlation": data.benchmark_corr.tolist(),
+        "benchmark_correlation": benchmark_model.correlation(
+            benchmark_copula
+        ).tolist(),
         "models": models,
     }
     return results, parameters

@@ -57,7 +57,7 @@ The sample begins on 7 October 2016 because FRED's freely distributed daily S&P 
 
 Daily log returns are split chronologically: the first 80% estimate the models and the final 20% form an untouched holdout set. The stationary wavelet transform is applied separately to each subset. The main model fits the Student-t copula degrees of freedom by maximum likelihood and estimates its correlation matrix from transformed ranks. Copula draws are mapped through empirical margins, then equal-weight portfolio 99% VaR and Expected Shortfall are calculated.
 
-The benchmark's raw-return Gaussian copula correlation is reused at all wavelet horizons. Because both models share the same band-specific empirical margins, their risk difference isolates dependence and joint-tail assumptions. Holdout VaR exception rates and quantile losses provide the out-of-sample comparison.
+The benchmark's raw-return Gaussian copula correlation is reused at all wavelet horizons. Student-t and Gaussian implementations share a `CopulaModel` fit/simulate/inspect interface, so additional copula families can be introduced without changing the horizon-analysis workflow. Because both models share the same band-specific empirical margins, their risk difference isolates dependence and joint-tail assumptions. Holdout VaR exception rates and quantile losses provide the out-of-sample comparison.
 
 The fixed holdout design is distributional validation, not a rolling one-day forecast. Main limitations are index/spot proxies, symmetric t-copula tails, wavelet boundary effects and finite-sample empirical tail estimates. These are discussed in the report.
 
@@ -70,7 +70,7 @@ The fixed holdout design is distributional validation, not a rolling one-day for
 - `src/data_repository.py` - aligned CSV snapshot persistence.
 - `src/data_preparation.py` - alignment, validation and log-return construction.
 - `src/wavelets.py` - additive multiresolution decomposition.
-- `src/copulas.py` - copula estimation, simulation and tail dependence.
+- `src/copulas.py` - common copula interface plus Student-t and Gaussian implementations.
 - `src/risk.py` - VaR, Expected Shortfall and holdout scoring.
 - `src/plots.py` - figures.
 - `src/report.py` - PDF generation.

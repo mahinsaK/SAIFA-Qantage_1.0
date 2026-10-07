@@ -196,6 +196,6 @@ def build_report(
     for ref in refs:
         story.append(Paragraph(ref, styles["Smallx"]))
     story.append(Spacer(1, 4))
-    story.append(Paragraph("Code map: src/config.py defines assumptions; src/data.py coordinates market data; src/data_source.py acquires FRED series; src/data_repository.py persists snapshots; src/data_preparation.py cleans levels and calculates returns; src/wavelets.py creates horizon bands; src/copulas.py fits and simulates dependence; src/risk.py scores risk; src/pipeline.py orchestrates outputs; src/report.py builds this document.", styles["Captionx"]))
+    story.append(Paragraph("Code map: src/config.py defines assumptions; src/data.py coordinates market data; src/data_source.py acquires FRED series; src/data_repository.py persists snapshots; src/data_preparation.py cleans levels and calculates returns; src/wavelets.py creates horizon bands; src/copulas.py defines the common model contract and copula implementations; src/risk.py scores risk; src/pipeline.py orchestrates outputs; src/report.py builds this document.", styles["Captionx"]))
 
     doc.build(story)

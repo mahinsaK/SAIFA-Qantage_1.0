@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol, TypeVar, runtime_checkable
 
 import numpy as np
 from scipy.optimize import minimize_scalar
@@ -11,6 +12,30 @@ from scipy.stats import norm, rankdata, t
 
 
 EPS = 1e-9
+FittedCopulaT = TypeVar("FittedCopulaT")
+
+
+@runtime_checkable
+class CopulaModel(Protocol[FittedCopulaT]):
+    """Common contract for fitting, simulating, and inspecting a copula."""
+
+    @property
+    def name(self) -> str: ...
+
+    def fit(self, data: np.ndarray) -> FittedCopulaT: ...
+
+    def simulate_uniforms(
+        self,
+        fitted: FittedCopulaT,
+        size: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray: ...
+
+    def lower_tail_dependence(self, fitted: FittedCopulaT) -> float: ...
+
+    def correlation(self, fitted: FittedCopulaT) -> np.ndarray: ...
+
+    def parameters(self, fitted: FittedCopulaT) -> dict[str, object]: ...
 
 
 def pseudo_observations(data: np.ndarray) -> np.ndarray:
@@ -54,6 +79,11 @@ class TCopula:
     df: float
     corr: np.ndarray
     loglik: float
+
+
+@dataclass(frozen=True)
+class GaussianCopula:
+    corr: np.ndarray
 
 
 def fit_t_copula(data: np.ndarray, df_bounds: tuple[float, float]) -> TCopula:
@@ -111,3 +141,62 @@ def empirical_inverse_margins(u: np.ndarray, data: np.ndarray) -> np.ndarray:
     return np.column_stack(
         [np.quantile(data[:, j], probs[:, j], method="linear") for j in range(data.shape[1])]
     )
+
+
+@dataclass(frozen=True)
+class StudentTCopulaModel:
+    """Student-t copula implementation of the common model contract."""
+
+    df_bounds: tuple[float, float]
+    name: str = "student_t"
+
+    def fit(self, data: np.ndarray) -> TCopula:
+        return fit_t_copula(data, self.df_bounds)
+
+    def simulate_uniforms(
+        self,
+        fitted: TCopula,
+        size: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        return simulate_t_uniforms(fitted, size, rng)
+
+    def lower_tail_dependence(self, fitted: TCopula) -> float:
+        return t_lower_tail_dependence(fitted)
+
+    def correlation(self, fitted: TCopula) -> np.ndarray:
+        return fitted.corr
+
+    def parameters(self, fitted: TCopula) -> dict[str, object]:
+        return {
+            "t_df": fitted.df,
+            "t_loglik": fitted.loglik,
+            "t_correlation": fitted.corr.tolist(),
+        }
+
+
+@dataclass(frozen=True)
+class GaussianCopulaModel:
+    """Gaussian copula implementation of the common model contract."""
+
+    name: str = "gaussian"
+
+    def fit(self, data: np.ndarray) -> GaussianCopula:
+        return GaussianCopula(fit_gaussian_correlation(data))
+
+    def simulate_uniforms(
+        self,
+        fitted: GaussianCopula,
+        size: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        return simulate_gaussian_uniforms(fitted.corr, size, rng)
+
+    def lower_tail_dependence(self, fitted: GaussianCopula) -> float:
+        return 0.0
+
+    def correlation(self, fitted: GaussianCopula) -> np.ndarray:
+        return fitted.corr
+
+    def parameters(self, fitted: GaussianCopula) -> dict[str, object]:
+        return {"correlation": fitted.corr.tolist()}
