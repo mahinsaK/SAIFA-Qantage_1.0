@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import asdict, dataclass
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 import numpy as np
 import pandas as pd
@@ -12,17 +13,11 @@ import pandas as pd
 from .copulas import (
     CopulaModel,
     GaussianCopula,
-    GaussianCopulaModel,
-    StudentTCopulaModel,
     TCopula,
     empirical_inverse_margins,
     empirical_lower_tail_dependence,
 )
 from .config import AnalysisConfig
-from .data import create_market_data_service
-from .plots import plot_backtest, plot_risk_comparison, plot_tail_dependence
-from .report import build_report
-from .report_content import build_report_content
 from .results import (
     AnalysisResult,
     HorizonModelParameters,
@@ -30,7 +25,14 @@ from .results import (
     matrix_to_tuple,
 )
 from .risk import holdout_metrics, portfolio_losses, var_es
-from .wavelets import decompose
+
+
+class MarketDataGateway(Protocol):
+    """Market-data operations required by the pipeline."""
+
+    def load_prices(self, refresh: bool = False) -> pd.DataFrame: ...
+
+    def calculate_returns(self, prices: pd.DataFrame) -> pd.DataFrame: ...
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,32 @@ class PreparedData:
     weights: np.ndarray
 
 
+ResultWriter = Callable[
+    [OutputPaths, PreparedData, AnalysisResult, AnalysisConfig],
+    None,
+]
+ArtifactPublisher = Callable[
+    [OutputPaths, PreparedData, AnalysisResult, AnalysisConfig],
+    None,
+]
+WaveletDecomposer = Callable[
+    [pd.DataFrame, AnalysisConfig],
+    dict[str, pd.DataFrame],
+]
+
+
+@dataclass(frozen=True)
+class PipelineDependencies:
+    """External collaborators selected by the application composition root."""
+
+    market_data: MarketDataGateway
+    decomposer: WaveletDecomposer
+    primary_model: CopulaModel[TCopula]
+    benchmark_model: CopulaModel[GaussianCopula]
+    result_writer: ResultWriter
+    artifact_publisher: ArtifactPublisher
+
+
 def _mean_off_diagonal(matrix: np.ndarray) -> float:
     return float(matrix[np.triu_indices_from(matrix, k=1)].mean())
 
@@ -72,14 +100,13 @@ def _create_output_paths(root: Path) -> OutputPaths:
 
 
 def _prepare_data(
-    root: Path,
     config: AnalysisConfig,
     refresh_data: bool,
+    dependencies: PipelineDependencies,
 ) -> PreparedData:
     """Load, split, transform, and validate inputs for model analysis."""
-    market_data = create_market_data_service(root, config)
-    prices = market_data.load_prices(refresh_data)
-    returns = market_data.calculate_returns(prices)
+    prices = dependencies.market_data.load_prices(refresh_data)
+    returns = dependencies.market_data.calculate_returns(prices)
     split = int(config.train_fraction * len(returns))
     train = returns.iloc[:split].copy()
     test = returns.iloc[split:].copy()
@@ -88,8 +115,8 @@ def _prepare_data(
         returns=returns,
         train=train,
         test=test,
-        train_components=decompose(train, config),
-        test_components=decompose(test, config),
+        train_components=dependencies.decomposer(train, config),
+        test_components=dependencies.decomposer(test, config),
         weights=np.asarray(config.weights),
     )
 
@@ -168,12 +195,13 @@ def _analyze_horizon(
 def _analyze_horizons(
     data: PreparedData,
     config: AnalysisConfig,
+    dependencies: PipelineDependencies,
 ) -> AnalysisResult:
     """Analyze all configured horizons with deterministic child seeds."""
     seed_sequence = np.random.SeedSequence(config.seed)
     child_seeds = seed_sequence.spawn(len(config.ordered_scale_labels) * 2)
-    primary_model = StudentTCopulaModel(config.t_df_bounds)
-    benchmark_model = GaussianCopulaModel()
+    primary_model = dependencies.primary_model
+    benchmark_model = dependencies.benchmark_model
     benchmark_copula = benchmark_model.fit(data.train.to_numpy())
 
     scale_results: list[ScaleResult] = []
@@ -203,76 +231,6 @@ def _analyze_horizons(
     )
 
 
-def _save_results(
-    paths: OutputPaths,
-    data: PreparedData,
-    results: AnalysisResult,
-    config: AnalysisConfig,
-) -> None:
-    """Persist machine-readable results without creating presentation artifacts."""
-    pd.DataFrame(results.csv_records()).to_csv(
-        paths.tables / "risk_results.csv",
-        index=False,
-        float_format="%.10f",
-    )
-    data.returns.to_csv(
-        paths.tables / "aligned_log_returns.csv",
-        float_format="%.10f",
-    )
-    with (paths.tables / "model_parameters.json").open(
-        "w",
-        encoding="utf-8",
-    ) as handle:
-        parameters: dict[str, object] = {
-            "config": asdict(config),
-            "asset_order": list(config.asset_codes),
-            "weights": data.weights.tolist(),
-            "seed": config.seed,
-            "simulations_per_scale": config.simulations,
-            "benchmark_correlation": [
-                list(row) for row in results.benchmark_correlation
-            ],
-            "models": results.model_parameter_records(),
-        }
-        json.dump(parameters, handle, indent=2)
-
-
-def _create_artifacts(
-    paths: OutputPaths,
-    data: PreparedData,
-    results: AnalysisResult,
-    config: AnalysisConfig,
-) -> None:
-    """Create plots and the PDF report from completed analysis results."""
-    plot_tail_dependence(
-        results.scales,
-        paths.figures / "tail_dependence.png",
-        config.tail_quantile,
-    )
-    plot_risk_comparison(
-        results.scales,
-        paths.figures / "risk_comparison.png",
-        config.confidence_level,
-    )
-    plot_backtest(
-        results.scales,
-        paths.figures / "backtest.png",
-        config.confidence_level,
-    )
-    report_content = build_report_content(
-        results.scales,
-        data.prices,
-        str(data.train.index[-1].date()),
-        str(data.test.index[0].date()),
-        config,
-    )
-    build_report(
-        paths.pdfs / config.report_filename,
-        paths.figures,
-        report_content,
-    )
-
-
 def _print_summary(
     paths: OutputPaths,
     data: PreparedData,
@@ -291,12 +249,13 @@ def _print_summary(
 def run_pipeline(
     root: Path,
     config: AnalysisConfig,
+    dependencies: PipelineDependencies,
     refresh_data: bool = False,
 ) -> None:
     """Coordinate the analysis stages without implementing their details."""
     paths = _create_output_paths(root)
-    data = _prepare_data(root, config, refresh_data)
-    results = _analyze_horizons(data, config)
-    _save_results(paths, data, results, config)
-    _create_artifacts(paths, data, results, config)
+    data = _prepare_data(config, refresh_data, dependencies)
+    results = _analyze_horizons(data, config, dependencies)
+    dependencies.result_writer(paths, data, results, config)
+    dependencies.artifact_publisher(paths, data, results, config)
     _print_summary(paths, data, config)

@@ -14,6 +14,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(MPL_CACHE))
 os.environ.setdefault("XDG_CACHE_HOME", str(PROJECT_ROOT / ".cache"))
 
 from src.config import DEFAULT_CONFIG
+from src.composition import create_pipeline_dependencies
 from src.pipeline import run_pipeline
 
 
@@ -35,7 +36,13 @@ def main() -> None:
     )
     args = parser.parse_args()
     config = replace(DEFAULT_CONFIG, simulations=args.simulations)
-    run_pipeline(PROJECT_ROOT, config, refresh_data=args.refresh_data)
+    dependencies = create_pipeline_dependencies(PROJECT_ROOT, config)
+    run_pipeline(
+        PROJECT_ROOT,
+        config,
+        dependencies,
+        refresh_data=args.refresh_data,
+    )
 
 
 if __name__ == "__main__":

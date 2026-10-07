@@ -65,6 +65,8 @@ Internally, risk estimates, backtests, horizon results and fitted-model metadata
 
 Report prose, conclusions and table values are built independently of the PDF library. The PDF renderer receives this immutable content and handles only page layout, typography and figures.
 
+The pipeline receives its market-data gateway, wavelet decomposer, copula models, result writer and artifact publisher as dependencies. `src/composition.py` is the production composition root, while tests can supply in-memory implementations.
+
 ## Code map
 
 - `run.py` - single entry point.
@@ -73,11 +75,14 @@ Report prose, conclusions and table values are built independently of the PDF li
 - `src/data_source.py` - FRED acquisition and raw-response caching.
 - `src/data_repository.py` - aligned CSV snapshot persistence.
 - `src/data_preparation.py` - alignment, validation and log-return construction.
+- `src/composition.py` - production dependency assembly.
 - `src/wavelets.py` - additive multiresolution decomposition.
 - `src/copulas.py` - common copula interface plus Student-t and Gaussian implementations.
 - `src/risk.py` - VaR, Expected Shortfall and holdout scoring.
 - `src/results.py` - immutable typed analysis, risk and backtest results.
 - `src/plots.py` - figures.
+- `src/outputs.py` - CSV and JSON persistence adapter.
+- `src/artifacts.py` - figure and report publication adapter.
 - `src/report_content.py` - report prose, conclusions and tables.
 - `src/report.py` - PDF layout and rendering.
 - `src/pipeline.py` - complete orchestration.
