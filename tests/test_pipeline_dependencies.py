@@ -12,9 +12,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from src.config import DEFAULT_CONFIG
-from src.copulas import GaussianCopula, TCopula
-from src.pipeline import PipelineDependencies, run_pipeline
+from src.application.pipeline import PipelineDependencies, run_pipeline
+from src.domain.config import DEFAULT_CONFIG
+from src.models.copulas import GaussianCopula, TCopula
 
 
 class FakeMarketData:

@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import AnalysisConfig
-from .data_preparation import LogReturnCalculator, MarketDataPreprocessor
-from .data_repository import CsvMarketDataRepository
-from .data_source import FredDataProvider, MarketDataProvider
+from ..domain.config import AnalysisConfig
+from .preparation import LogReturnCalculator, MarketDataPreprocessor
+from .repository import CsvMarketDataRepository
+from .source import FredDataProvider, MarketDataProvider
 
 
 @dataclass

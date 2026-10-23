@@ -8,8 +8,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from src.config import DEFAULT_CONFIG
-from src.data_preparation import LogReturnCalculator, MarketDataPreprocessor
+from src.data.preparation import LogReturnCalculator, MarketDataPreprocessor
+from src.domain.config import DEFAULT_CONFIG
 
 
 class MarketDataPreprocessorTests(unittest.TestCase):

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .config import AnalysisConfig
+from ..domain.config import AnalysisConfig
 
 
 @dataclass(frozen=True)

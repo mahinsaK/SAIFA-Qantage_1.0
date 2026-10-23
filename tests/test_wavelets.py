@@ -8,8 +8,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from src.config import DEFAULT_CONFIG
-from src.wavelets import decompose
+from src.domain.config import DEFAULT_CONFIG
+from src.models.wavelets import decompose
 
 
 class WaveletDecompositionTests(unittest.TestCase):

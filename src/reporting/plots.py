@@ -11,7 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .results import ScaleResult
+from ..domain.results import ScaleResult
 
 
 BLUE = "#173A63"

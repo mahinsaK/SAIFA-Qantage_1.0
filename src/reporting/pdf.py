@@ -14,7 +14,7 @@ from reportlab.platypus import (
     Paragraph, Spacer, Table, TableStyle,
 )
 
-from .report_content import ReportContent
+from .content import ReportContent
 
 
 NAVY = colors.HexColor("#173A63")

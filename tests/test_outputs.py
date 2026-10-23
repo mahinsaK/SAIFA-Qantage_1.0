@@ -11,16 +11,16 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from src.config import DEFAULT_CONFIG
-from src.outputs import save_results
-from src.pipeline import OutputPaths, PreparedData
-from src.results import (
+from src.application.pipeline import OutputPaths, PreparedData
+from src.domain.config import DEFAULT_CONFIG
+from src.domain.results import (
     AnalysisResult,
     BacktestResult,
     HorizonModelParameters,
     RiskEstimate,
     ScaleResult,
 )
+from src.infrastructure.result_writer import save_results
 
 
 class OutputAdapterTests(unittest.TestCase):

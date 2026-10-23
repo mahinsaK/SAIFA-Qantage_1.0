@@ -14,7 +14,7 @@ uv run python run.py
 
 That command creates every number, table, figure and the final PDF report. The first run installs the dependencies declared in `pyproject.toml`; later runs use the generated lock file. The included `data/market_prices.csv` snapshot fixes the submitted result and permits offline reproduction.
 
-All analytical assumptions are defined once in `src/config.py`. This includes the assets and weights, sample split, simulation count, confidence level, tail threshold, wavelet settings, Student-t bounds and random seed. The CLI creates a validated copy of this configuration when `--simulations` is supplied.
+All analytical assumptions are defined once in `src/domain/config.py`. This includes the assets and weights, sample split, simulation count, confidence level, tail threshold, wavelet settings, Student-t bounds and random seed. The CLI creates a validated copy of this configuration when `--simulations` is supplied.
 
 To redownload the public data before running:
 
@@ -67,27 +67,17 @@ Internally, risk estimates, backtests, horizon results and fitted-model metadata
 
 Report prose, conclusions and table values are built independently of the PDF library. The PDF renderer receives this immutable content and handles only page layout, typography and figures.
 
-The pipeline receives its market-data gateway, wavelet decomposer, copula models, result writer and artifact publisher as dependencies. `src/composition.py` is the production composition root, while tests can supply in-memory implementations.
+The pipeline receives its market-data gateway, wavelet decomposer, copula models, result writer and artifact publisher as dependencies. `src/application/composition.py` is the production composition root, while tests can supply in-memory implementations.
 
 ## Code map
 
 - `run.py` - single entry point.
-- `src/config.py` - central, validated analysis configuration.
-- `src/data.py` - market-data application service.
-- `src/data_source.py` - FRED acquisition and raw-response caching.
-- `src/data_repository.py` - aligned CSV snapshot persistence.
-- `src/data_preparation.py` - alignment, validation and log-return construction.
-- `src/composition.py` - production dependency assembly.
-- `src/wavelets.py` - additive multiresolution decomposition.
-- `src/copulas.py` - common copula interface plus Student-t and Gaussian implementations.
-- `src/risk.py` - VaR, Expected Shortfall and holdout scoring.
-- `src/results.py` - immutable typed analysis, risk and backtest results.
-- `src/plots.py` - figures.
-- `src/outputs.py` - CSV and JSON persistence adapter.
-- `src/artifacts.py` - figure and report publication adapter.
-- `src/report_content.py` - report prose, conclusions and tables.
-- `src/report.py` - PDF layout and rendering.
-- `src/pipeline.py` - complete orchestration.
+- `src/application/` - pipeline orchestration and production dependency assembly.
+- `src/domain/` - validated configuration, risk calculations and immutable result contracts.
+- `src/data/` - FRED acquisition, snapshot persistence, preparation and market-data service.
+- `src/models/` - wavelet decomposition and copula implementations.
+- `src/reporting/` - figures, report content, PDF layout and artifact publication.
+- `src/infrastructure/` - CSV and JSON result-writing adapter.
 
 ## AI-use disclosure
 

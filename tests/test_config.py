@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from src.config import DEFAULT_CONFIG
+from src.domain.config import DEFAULT_CONFIG
 
 
 class AnalysisConfigTests(unittest.TestCase):

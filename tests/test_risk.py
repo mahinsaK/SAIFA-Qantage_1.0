@@ -7,8 +7,8 @@ import unittest
 
 import numpy as np
 
-from src.results import RiskEstimate
-from src.risk import holdout_metrics, portfolio_losses, var_es
+from src.domain.results import RiskEstimate
+from src.domain.risk import holdout_metrics, portfolio_losses, var_es
 
 
 class RiskCalculationTests(unittest.TestCase):

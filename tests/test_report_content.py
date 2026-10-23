@@ -7,9 +7,9 @@ import unittest
 
 import pandas as pd
 
-from src.config import DEFAULT_CONFIG
-from src.report_content import build_report_content
-from src.results import BacktestResult, RiskEstimate, ScaleResult
+from src.domain.config import DEFAULT_CONFIG
+from src.domain.results import BacktestResult, RiskEstimate, ScaleResult
+from src.reporting.content import build_report_content
 
 
 class ReportContentTests(unittest.TestCase):

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pywt
 
-from .config import AnalysisConfig
+from ..domain.config import AnalysisConfig
 
 
 def _valid_length(frame: pd.DataFrame, level: int) -> pd.DataFrame:

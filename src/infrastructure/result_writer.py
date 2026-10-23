@@ -7,9 +7,9 @@ from dataclasses import asdict
 
 import pandas as pd
 
-from .config import AnalysisConfig
-from .pipeline import OutputPaths, PreparedData
-from .results import AnalysisResult
+from ..application.pipeline import OutputPaths, PreparedData
+from ..domain.config import AnalysisConfig
+from ..domain.results import AnalysisResult
 
 
 def save_results(

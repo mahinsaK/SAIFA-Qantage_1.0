@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 import unittest
 
-from src.results import (
+from src.domain.results import (
     AnalysisResult,
     BacktestResult,
     HorizonModelParameters,

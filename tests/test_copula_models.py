@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from src.copulas import CopulaModel, GaussianCopulaModel, StudentTCopulaModel
+from src.models.copulas import CopulaModel, GaussianCopulaModel, StudentTCopulaModel
 
 
 class CopulaModelContractTests(unittest.TestCase):

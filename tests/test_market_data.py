@@ -10,10 +10,10 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from src.config import DEFAULT_CONFIG
-from src.data import MarketDataService
-from src.data_preparation import LogReturnCalculator, MarketDataPreprocessor
-from src.data_repository import CsvMarketDataRepository
+from src.data.preparation import LogReturnCalculator, MarketDataPreprocessor
+from src.data.repository import CsvMarketDataRepository
+from src.data.service import MarketDataService
+from src.domain.config import DEFAULT_CONFIG
 
 
 class StubProvider:

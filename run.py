@@ -13,9 +13,9 @@ MPL_CACHE.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(MPL_CACHE))
 os.environ.setdefault("XDG_CACHE_HOME", str(PROJECT_ROOT / ".cache"))
 
-from src.config import DEFAULT_CONFIG
-from src.composition import create_pipeline_dependencies
-from src.pipeline import run_pipeline
+from src.application.composition import create_pipeline_dependencies
+from src.application.pipeline import run_pipeline
+from src.domain.config import DEFAULT_CONFIG
 
 
 def main() -> None:

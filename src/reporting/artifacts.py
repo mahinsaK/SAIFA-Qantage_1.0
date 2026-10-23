@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from .config import AnalysisConfig
-from .pipeline import OutputPaths, PreparedData
+from ..application.pipeline import OutputPaths, PreparedData
+from ..domain.config import AnalysisConfig
+from ..domain.results import AnalysisResult
+from .content import build_report_content
+from .pdf import build_report
 from .plots import plot_backtest, plot_risk_comparison, plot_tail_dependence
-from .report import build_report
-from .report_content import build_report_content
-from .results import AnalysisResult
 
 
 def publish_artifacts(

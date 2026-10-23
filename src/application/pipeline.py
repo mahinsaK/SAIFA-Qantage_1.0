@@ -10,21 +10,21 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 
-from .copulas import (
+from ..models.copulas import (
     CopulaModel,
     GaussianCopula,
     TCopula,
     empirical_inverse_margins,
     empirical_lower_tail_dependence,
 )
-from .config import AnalysisConfig
-from .results import (
+from ..domain.config import AnalysisConfig
+from ..domain.results import (
     AnalysisResult,
     HorizonModelParameters,
     ScaleResult,
     matrix_to_tuple,
 )
-from .risk import holdout_metrics, portfolio_losses, var_es
+from ..domain.risk import holdout_metrics, portfolio_losses, var_es
 
 
 class MarketDataGateway(Protocol):
